@@ -1,4 +1,4 @@
-package azure.constant;
+package azure.component.constant;
 
 public class Constants {
 

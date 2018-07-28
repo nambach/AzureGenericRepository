@@ -1,4 +1,4 @@
-package azure;
+package azure.cloudservice;
 
 public interface BlobService {
 

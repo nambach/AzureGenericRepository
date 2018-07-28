@@ -1,6 +1,6 @@
-package azure.impl;
+package azure.cloudservice.impl;
 
-import azure.BlobService;
+import azure.cloudservice.BlobService;
 import com.microsoft.azure.storage.CloudStorageAccount;
 import com.microsoft.azure.storage.OperationContext;
 import com.microsoft.azure.storage.StorageException;
@@ -12,8 +12,8 @@ import java.io.InputStream;
 import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
 
-import static azure.constant.Constants.AZURE_ACC_KEY;
-import static azure.constant.Constants.AZURE_ACC_NAME;
+import static azure.component.constant.Constants.AZURE_ACC_KEY;
+import static azure.component.constant.Constants.AZURE_ACC_NAME;
 
 public class BlobServiceImpl implements BlobService {
 

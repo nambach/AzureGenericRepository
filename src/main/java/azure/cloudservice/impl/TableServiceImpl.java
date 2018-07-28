@@ -1,24 +1,25 @@
-package azure.impl;
+package azure.cloudservice.impl;
 
-import azure.TableService;
-import azure.annotation.AzureTableName;
+import azure.cloudservice.TableService;
 import azure.component.BootgridResponse;
 import azure.component.GenericEntity;
-import azure.util.QueryUtils;
+import azure.component.annotation.AzureTableName;
+import azure.component.util.QueryUtils;
 import com.microsoft.azure.storage.CloudStorageAccount;
 import com.microsoft.azure.storage.ResultContinuation;
 import com.microsoft.azure.storage.ResultSegment;
 import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.table.*;
-import util.JsonUtils;
-import util.StringUtils;
+import util.GenericClassUtils;
 
-import java.lang.reflect.ParameterizedType;
 import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
 
-import static azure.constant.Constants.*;
+import static azure.component.constant.Constants.*;
 
 public class TableServiceImpl<T extends GenericEntity> implements TableService<T> {
 
@@ -39,8 +40,7 @@ public class TableServiceImpl<T extends GenericEntity> implements TableService<T
     }
 
     private void setEntityClass() {
-        this.entityClass = (Class)((ParameterizedType) this.getClass().getGenericSuperclass())
-                .getActualTypeArguments()[0];
+        this.entityClass = GenericClassUtils.getGenericClass(this.getClass(), 0);
     }
 
     private void setTableName() {
@@ -68,6 +68,9 @@ public class TableServiceImpl<T extends GenericEntity> implements TableService<T
 
             // Create a cloud table object for the table.
             cloudTable = tableClient.getTableReference(tableName);
+            if (!cloudTable.exists()) {
+                cloudTable.create();
+            }
 
         } catch (URISyntaxException | InvalidKeyException | StorageException e) {
             e.printStackTrace();
@@ -207,7 +210,7 @@ public class TableServiceImpl<T extends GenericEntity> implements TableService<T
      * Get an entity (only if rowKeys are distinct!!)
      *
      * @param rowKey entity's rowKey
-     * @return
+     * @return entity
      */
     @Override
     public T getEntity(String rowKey) {
@@ -243,51 +246,7 @@ public class TableServiceImpl<T extends GenericEntity> implements TableService<T
     }
 
     @Override
-    public List<T> query(String partitionKey, String azureFilter) {
-        try {
-            String filter = null;
-
-            // Generate filter from PartitionKey
-            String partitionFilter = null;
-            if (partitionKey != null) {
-                partitionFilter = QueryUtils.getEqualFilter(PARTITION_KEY, partitionKey);
-            }
-
-            // Combine filters
-            if (partitionFilter != null && azureFilter != null) {
-                filter = QueryUtils.combineFilters(partitionFilter, azureFilter);
-            } else if (partitionFilter != null){
-                filter = partitionFilter;
-            } else if (azureFilter != null) {
-                filter = azureFilter;
-            }
-
-            // Specify a combo query
-            TableQuery<T> query = TableQuery.from(entityClass);
-            if (filter != null) {
-                query.where(filter);
-            }
-
-            // Collect entities.
-            List<T> list = new ArrayList<>();
-            ResultContinuation token = null;
-
-            do {
-                ResultSegment<T> queryResult = cloudTable.executeSegmented(query, token);
-                list.addAll(queryResult.getResults());
-                token = queryResult.getContinuationToken();
-            } while (token != null);
-
-            return list;
-        } catch (Exception e) {
-            // Output the stack trace.
-            e.printStackTrace();
-            return new ArrayList<>();
-        }
-    }
-
-    @Override
-    public List<T> searchAll() {
+    public List<T> queryAll() {
         try {
             ResultContinuation token = null;
             List<T> list = new ArrayList<>();
@@ -307,39 +266,11 @@ public class TableServiceImpl<T extends GenericEntity> implements TableService<T
     }
 
     @Override
-    public List<T> searchAll(String partitionKey) {
-        try {
-            // Prepare partitionKey filter
-            String partitionFilter = QueryUtils.getEqualFilter(PARTITION_KEY, partitionKey);
-
-            // Specify a partition query
-            TableQuery<T> partitionQuery =
-                    TableQuery.from(entityClass)
-                            .where(partitionFilter);
-
-            // Start query continually
-            List<T> list = new ArrayList<>();
-            ResultContinuation token = null;
-            do {
-                ResultSegment<T> queryResult = cloudTable.executeSegmented(partitionQuery, token);
-                list.addAll(queryResult.getResults());
-                token = queryResult.getContinuationToken();
-            } while (token != null);
-
-            return list;
-        } catch (Exception e) {
-            // Output the stack trace.
-            e.printStackTrace();
-            return new ArrayList<>();
-        }
-    }
-
-    @Override
-    public List<T> searchAll(String partitionKey, String equalConditions) {
+    public List<T> query(String partitionKey, String azureFilter) {
         try {
 
             // Specify a combo query
-            TableQuery<T> query = getQuery(partitionKey, equalConditions);
+            TableQuery<T> query = createQuery(partitionKey, azureFilter);
 
             // Collect entities.
             List<T> list = new ArrayList<>();
@@ -360,72 +291,11 @@ public class TableServiceImpl<T extends GenericEntity> implements TableService<T
     }
 
     @Override
-    public List<T> searchAll(String partitionKey, String equalConditions, String queryFilter) {
+    public BootgridResponse<T> queryPage(int rowCount, int currentPage, String partitionKey, String azureFilter) {
         try {
-            String filter = null;
-
-            // Generate Filters from PartitionKey and equalConditions
-            String partitionAndEqualFilter = getQueryFilter(partitionKey, equalConditions);
-
-            // Combine
-            if (partitionAndEqualFilter != null && queryFilter != null) {
-                filter = TableQuery.combineFilters(
-                        partitionAndEqualFilter, TableQuery.Operators.AND, queryFilter);
-            } else if (queryFilter != null) {
-                filter = queryFilter;
-            } else if (partitionAndEqualFilter != null) {
-                filter = partitionAndEqualFilter;
-            }
 
             // Specify a combo query
-            TableQuery<T> query = TableQuery.from(entityClass);
-            if (filter != null) {
-                query.where(filter);
-            }
-
-            // Collect entities.
-            List<T> list = new ArrayList<>();
-            ResultContinuation token = null;
-
-            do {
-                ResultSegment<T> queryResult = cloudTable.executeSegmented(query, token);
-                list.addAll(queryResult.getResults());
-                token = queryResult.getContinuationToken();
-            } while (token != null);
-
-            return list;
-        } catch (Exception e) {
-            // Output the stack trace.
-            e.printStackTrace();
-            return new ArrayList<>();
-        }
-    }
-
-    @Override
-    public BootgridResponse<T> searchPage(int rowCount, int currentPage, String partitionKey, String queryFilter) {
-        try {
-            String filter = null;
-
-            // Generate PartitionKey Filter
-            if (partitionKey != null) {
-                partitionKey = QueryUtils.getEqualFilter(PARTITION_KEY, partitionKey);
-            }
-
-            // Generate and combine filter
-            if (partitionKey != null && queryFilter != null) {
-                filter = TableQuery.combineFilters(
-                        partitionKey, TableQuery.Operators.AND, queryFilter);
-            } else if (queryFilter != null) {
-                filter = queryFilter;
-            } else if (partitionKey != null) {
-                filter = partitionKey;
-            }
-
-            // Specify a combo query
-            TableQuery<T> query = TableQuery.from(entityClass);
-            if (filter != null) {
-                query.where(filter);
-            }
+            TableQuery<T> query = createQuery(partitionKey, azureFilter);
 
             // Collect entities.
             List<T> list = new ArrayList<>();
@@ -476,10 +346,11 @@ public class TableServiceImpl<T extends GenericEntity> implements TableService<T
     }
 
     @Override
-    public List<T> searchTop(int count, String partitionKey, String equalConditions) {
+    public List<T> queryTop(int count, String partitionKey, String azureFilter) {
         List<T> list = new ArrayList<>();
 
-        TableQuery<T> query = getQuery(partitionKey, equalConditions);
+        // Create TableQuery object
+        TableQuery<T> query = createQuery(partitionKey, azureFilter);
 
         try {
             if (count <= 0) {
@@ -512,79 +383,6 @@ public class TableServiceImpl<T extends GenericEntity> implements TableService<T
         }
     }
 
-    /**
-     * Generate TableQuery object from pk and other columns' value
-     * Search 'ALL' if parameters left 'null'
-     *
-     * @return {@link TableQuery}
-     */
-    private TableQuery<T> getQuery(String partitionKey, String equalConditions) {
-
-        // Get combo filter
-        String searchFilter = getQueryFilter(partitionKey, equalConditions);
-
-        // Specify query
-        TableQuery<T> query = TableQuery.from(entityClass);
-        if (searchFilter != null) {
-            query = query.where(searchFilter);
-        }
-
-        return query;
-    }
-
-    /**
-     * Generate TableQuery String from PartitionKey and other columns' search value
-     * @param partitionKey pk search value/ ignore when null
-     * @param equalConditions other columns' search value/ ignore when null
-     * @return TableQuery String
-     */
-    private String getQueryFilter(String partitionKey, String equalConditions) {
-        String comboFilter = null;
-        String partitionFilter = null;
-        String equalFilter = null;
-
-        // Get partitionKey filter
-        if (partitionKey != null) {
-            partitionFilter = QueryUtils.getEqualFilter(PARTITION_KEY, partitionKey);
-        }
-
-        // Get equalCondition filter
-        if (equalConditions != null) {
-            Map<String, String> map = JsonUtils.toMap(equalConditions, String.class);
-
-            // Gather equal conditions from JSON string
-            for (Map.Entry<String, String> entry : map.entrySet()) {
-                String key = StringUtils.capitalize(entry.getKey(), 0);
-                String value = entry.getValue();
-
-                String filter = QueryUtils.getEqualFilter(key, value);
-
-                if (equalFilter != null) {
-                    equalFilter = TableQuery.combineFilters(
-                            equalFilter,
-                            TableQuery.Operators.AND,
-                            filter);
-                } else {
-                    equalFilter = filter;
-                }
-            }
-        }
-
-        // Combine to the previous filter
-        if (partitionFilter != null && equalFilter != null) {
-            comboFilter = TableQuery.combineFilters(
-                    partitionFilter,
-                    TableQuery.Operators.AND,
-                    equalFilter);
-        } else if (partitionFilter != null) {
-            comboFilter = partitionFilter;
-        } else if (equalFilter != null) {
-            comboFilter = equalFilter;
-        }
-
-        return comboFilter;
-    }
-
     @Override
     public int count() {
         try {
@@ -607,5 +405,25 @@ public class TableServiceImpl<T extends GenericEntity> implements TableService<T
             e.printStackTrace();
             return 0;
         }
+    }
+
+    private TableQuery<T> createQuery(String partitionKey, String azureFilter) {
+
+        // Generate PartitionKey filter
+        String partitionFilter = null;
+        if (partitionKey != null) {
+            partitionFilter = QueryUtils.getEqualFilter(PARTITION_KEY, partitionKey);
+        }
+
+        // Combine all filters
+        String filter = QueryUtils.combineFilters(partitionFilter, azureFilter);
+
+        // Specify a combo query
+        TableQuery<T> query = TableQuery.from(entityClass);
+        if (filter != null) {
+            query.where(filter);
+        }
+
+        return query;
     }
 }

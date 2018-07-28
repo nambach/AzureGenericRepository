@@ -1,4 +1,4 @@
-package azure.annotation;
+package azure.component.annotation;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -8,5 +8,5 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(value = { ElementType.TYPE })
 public @interface AzureTableName {
-    String value();
+    String value() default "";
 }

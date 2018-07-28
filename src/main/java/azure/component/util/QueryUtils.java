@@ -1,6 +1,9 @@
-package azure.util;
+package azure.component.util;
 
 import com.microsoft.azure.storage.table.TableQuery;
+
+import java.util.LinkedList;
+import java.util.List;
 
 public class QueryUtils {
     public static String getEqualFilter(String columnName, String value) {
@@ -12,9 +15,16 @@ public class QueryUtils {
     }
 
     public static String combineFilters(String...filter) {
-        String combinedFilter = "";
-        if (filter.length < 2) {
+        String combinedFilter;
+
+        filter = removeNull(filter);
+
+        if (filter.length == 0) {
             return null;
+        }
+
+        if (filter.length == 1) {
+            return filter[0];
         }
 
         combinedFilter = TableQuery.combineFilters(
@@ -34,5 +44,18 @@ public class QueryUtils {
         }
 
         return combinedFilter;
+    }
+
+    private static String[] removeNull(String[] arr) {
+        List<String> list = new LinkedList<>();
+
+        for (String s : arr) {
+            if (s != null) {
+                list.add(s);
+            }
+        }
+
+        String[] newArr = new String[list.size()];
+        return list.toArray(newArr);
     }
 }

@@ -1,10 +1,10 @@
-package azure.business;
+package azure.repository;
 
 import azure.component.BootgridResponse;
 
 import java.util.List;
 
-public interface GenericBusiness<T> {
+public interface GenericRepository<T> {
 
     int insert(T model);
 

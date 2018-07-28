@@ -1,12 +1,12 @@
-package azure.business.impl;
+package azure.repository.impl;
 
-import azure.annotation.AzureTableName;
-import azure.business.GenericBusiness;
+import azure.component.annotation.AzureTableName;
+import azure.repository.GenericRepository;
 import azure.component.BootgridResponse;
 import azure.component.GenericEntity;
 import azure.component.GenericModel;
-import azure.impl.TableServiceImpl;
-import azure.util.QueryUtils;
+import azure.cloudservice.impl.TableServiceImpl;
+import azure.component.util.QueryUtils;
 import util.GenericClassUtils;
 import util.StringUtils;
 
@@ -15,16 +15,16 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static azure.constant.Constants.RESPONSE_CODE.*;
+import static azure.component.constant.Constants.RESPONSE_CODE.*;
 
-public class GenericBusinessImpl<M extends GenericModel<E>, E extends GenericEntity<M>> implements GenericBusiness<M> {
+public class GenericRepositoryImpl<M extends GenericModel<E>, E extends GenericEntity<M>> implements GenericRepository<M> {
 
     private TableServiceImpl<E> tableService;
 
     private Class<M> modelClass;
     private Class<E> entityClass;
 
-    public GenericBusinessImpl() {
+    public GenericRepositoryImpl() {
         this.modelClass = GenericClassUtils.getGenericClass(this.getClass(), 0);
         this.entityClass = GenericClassUtils.getGenericClass(this.getClass(), 1);
         this.tableService = new TableServiceImpl<>(entityClass, getAzureTableName());
@@ -33,8 +33,22 @@ public class GenericBusinessImpl<M extends GenericModel<E>, E extends GenericEnt
 
     private String getAzureTableName() {
         // Get table name
-        AzureTableName tableName = entityClass.getAnnotation(AzureTableName.class);
-        return tableName.value();
+        String tableName;
+
+        if (entityClass.isAnnotationPresent(AzureTableName.class)) {
+            AzureTableName azureTableName = entityClass.getAnnotation(AzureTableName.class);
+            tableName = azureTableName.value()
+                    .trim()
+                    .toLowerCase();
+
+            if (!tableName.equals("")) {
+                return tableName;
+            }
+        }
+
+        return entityClass.getSimpleName()
+                .toLowerCase()
+                .replaceAll("entity", "");
     }
 
     @Override
@@ -175,7 +189,7 @@ public class GenericBusinessImpl<M extends GenericModel<E>, E extends GenericEnt
 
     @Override
     public List<M> getAll(String partitionKey, String equalConditions) {
-        List<E> entities = tableService.searchAll(partitionKey, equalConditions, null);
+        List<E> entities = tableService.query(partitionKey, null);
         if (entities != null) {
             return entities.stream().map(E::toModel).collect(Collectors.toList());
         } else {
@@ -185,7 +199,7 @@ public class GenericBusinessImpl<M extends GenericModel<E>, E extends GenericEnt
 
     @Override
     public BootgridResponse<M> getPage(int rowCount, int currentPage, String partitionKey, String tableServiceQueryFilter) {
-        BootgridResponse<E> entities = tableService.searchPage(rowCount, currentPage, partitionKey, tableServiceQueryFilter);
+        BootgridResponse<E> entities = tableService.queryPage(rowCount, currentPage, partitionKey, tableServiceQueryFilter);
         BootgridResponse<M> models = null;
         try {
             models = new BootgridResponse<>(
